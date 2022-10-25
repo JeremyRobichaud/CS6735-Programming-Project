@@ -1,7 +1,6 @@
-import math
 import sys
-from statistics import mode
-from collections import Counter
+from src.algorithms.node import Node
+
 
 # Here's the Pseudocode (wikipedia):
 # Summary
@@ -11,96 +10,10 @@ from collections import Counter
 #     Make a decision tree node containing that attribute.
 #     Recurse on subsets using the remaining attributes.
 
-# Here's the class object of Node
-class Node:
-    """:class Node: A class version of a node"""
-    def __init__(self, attribute, parent_node=None, parent_value=None):
-        """
-        :param str attribute: The attribute of this current node. That of which will create the sub-nodes.
-        :param Node parent_node: The parent node of this node (None, if it's the root)
-        :param str parent_value: The value of the parent node given to this node (None, if it's the root)
-        """
-        self.attribute = attribute
-        self.parent_node = parent_node if parent_node else None
-        self.parent_value = parent_value if parent_node else None
-        self.parent_attribute = parent_node.get_attribute() if parent_node else None
-        self.sub_nodes = []
-        self.label = ""
-        pass
-
-    def is_leaf(self):
-        """
-        :return: Whether or not Node is leaf
-        :rtype: :bool:
-        """
-        return len(self.sub_nodes) == 0
-
-    def is_root(self):
-        """
-        :return: Whether or not Node is root
-        :rtype: :bool:
-        """
-        return not self.parent_node
-
-    def get_attribute(self):
-        """
-        :return: The attribute of the node
-        :rtype: :str:
-        """
-        return self.attribute
-
-    def get_children(self):
-        """
-        :return: List of child nodes
-        :rtype: :bool:
-        """
-        return self.sub_nodes
-
-    def add_child(self, new_node):
-        """
-        :param Node new_node: The new child node
-        """
-        self.sub_nodes.append(new_node)
-
-    def remove_child(self, old_node):
-        """
-        param Node old_node: The new child node
-        """
-        self.sub_nodes.remove(old_node)
-
-    def set_label(self, new_label):
-        """
-        :param str new_label: The new label
-        """
-        self.label = new_label
-
-
-def get_entropy(df, target_attribute, all_target_values):
-    all_values = df[target_attribute].value_counts()
-    result = 0
-    base = len(all_target_values)
-
-    for val in all_values:
-        result -= val * math.log(val, base)
-
-    return result
-
-
-def get_gain(df, target_attribute, all_target_values, calc_attribute):
-    calc_vals = df[calc_attribute].unique()
-    length_df = len(df)
-
-    gain = get_entropy(df, target_attribute, all_target_values)
-
-    for val in calc_vals:
-        temp_df = df.loc[df[calc_attribute] == val]
-        length_temp_df = len(temp_df)
-        gain -= (length_temp_df/length_df) * get_entropy(temp_df, target_attribute, all_target_values)
-
-    return gain
-
 
 def compute(df, target_attribute, other_attributes, all_attribute_values):
+    assert target_attribute not in other_attributes
+
     target_vals = df[target_attribute].unique()
     if len(target_vals) == 1:
         return target_vals[0]
@@ -108,27 +21,54 @@ def compute(df, target_attribute, other_attributes, all_attribute_values):
     if not other_attributes:
         return df[target_attribute].value_counts().index[0]
 
-    best_gain = sys.float_info.max * -1
-    best_attr = ''
-    for o_attr in other_attributes:
+    nodes_left = [
+        Node(
+            o_attr, all_attribute_values[o_attr], target_attribute, all_attribute_values[target_attribute],
+            is_indexable=(
+                    type(all_attribute_values[o_attr][0]) in [int, float] and len(all_attribute_values[o_attr]) > 30
+            )
+        )
+        for o_attr in other_attributes
+    ]
 
-        new_gain = get_gain(df, target_attribute, target_vals, o_attr)
+    # Get best attribute based on GAIN
+    best_gain = sys.float_info.max * -1
+    best_node = None
+    for n in nodes_left:
+
+        new_gain = n.get_gain_ratio(df)
         if new_gain > best_gain:
-            best_attr = o_attr
+            best_node = n
             best_gain = new_gain
 
-    retval = {
-        'attr': best_attr,
-        'children': {}
-    }
-    other_attributes.remove(best_attr)
-    new_other_attributes = other_attributes
-    for val in all_attribute_values[best_attr]:
-        new_df = df.loc[df[best_attr] == val]
-        if len(new_df) == 0:
-            retval['children'][val] = df[target_attribute].value_counts().index[0]
-        else:
-            temp = compute(new_df, target_attribute, new_other_attributes, all_attribute_values)
-            retval['children'][val] = temp
+    assert best_node
 
-    return retval
+    children = {}
+
+    # For each child attribute of BA, re-compute
+    other_attributes.remove(best_node.attr.name)
+    new_other_attributes = other_attributes
+
+    groups = best_node.get_grouping(df)
+
+    assert groups
+
+    best_child = None
+    best_len = -1
+
+    for key in groups:
+        new_df = groups[key]
+        if len(new_df) > best_len or not best_child:
+            best_child = key
+            best_len = len(new_df)
+        if len(new_df) == 0:
+            children[key] = df[target_attribute].value_counts().index[0]
+        else:
+            children[key] = compute(new_df, target_attribute, new_other_attributes, all_attribute_values)
+
+    assert best_child
+    children["UNK"] = children[best_child]
+
+    best_node.set_children(children)
+
+    return best_node

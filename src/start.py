@@ -8,8 +8,8 @@ import pandas as pd
 from algorithms.id3 import compute as id3_compute
 
 
-def start(k_fold):
-    data_file_paths = glob.glob('./data/*.data')
+def cross_fold(data_file_path, func, times=10, k_fold=5, name="TestingAlg"):
+    data_file_paths = glob.glob(data_file_path)
     for data_p in data_file_paths:
         logging.debug(f"Implementing for {data_p}...")
         df = pd.read_csv(data_p, header=None)
@@ -19,15 +19,14 @@ def start(k_fold):
         if "car.data" in data_p or "breast-cancer-wisconsin.data" in data_p or "ecoli.data" in data_p:
             target_attr = len(cols) - 1
 
-        cols.pop(target_attr)
-
         all_attribute_values = {}
         for c in cols:
             all_attribute_values[c] = df[c].unique()
 
+        cols.pop(target_attr)
         # 10 Times
         total_id3_acc = 0
-        for j in range(10):
+        for j in range(times):
             # Shuffle the df
             df = df.sample(frac=1)
 
@@ -37,31 +36,31 @@ def start(k_fold):
             k_fold_id3_acc = 0
 
             for i in range(k_fold):
-                id3_acc = 0
+                acc = 0
 
-                testing_df = df.iloc[i*chunk_size:(i+1)*chunk_size, :]
-                training_df = df.drop(range(i*chunk_size, (i+1)*chunk_size))
+                testing_df = df.iloc[i * chunk_size:(i + 1) * chunk_size, :]
+                training_df = df.drop(range(i * chunk_size, (i + 1) * chunk_size))
 
-                id3 = id3_compute(training_df, target_attr, cols.copy(), all_attribute_values)
+                classifier = func(training_df, target_attr, cols.copy(), all_attribute_values)
 
                 for index, row in testing_df.iterrows():
-                    temp_id3 = id3
-                    while True:
-                        if type(temp_id3) != dict:
-                            break
-                        cur_attr = temp_id3['attr']
-                        temp_id3 = temp_id3['children'][row[cur_attr]]
+                    if classifier.classify(row) == row[target_attr]:
+                        acc += 1
 
-                    id3_acc += 1 if temp_id3 == row[target_attr] else 0
-
-                k_fold_id3_acc += id3_acc / len(testing_df)
-                logging.debug(f"\t...[Fold {i+1}] accuracy found {id3_acc / len(testing_df)}")
+                k_fold_id3_acc += acc / len(testing_df)
+                logging.debug(f"\t...[Fold {i + 1}] accuracy found {acc / len(testing_df)}")
 
             total_id3_acc += k_fold_id3_acc / k_fold
-            logging.debug(f"...[Iteration #{j+1}] accuracy found {k_fold_id3_acc / k_fold}")
+            logging.debug(f"...[Iteration #{j + 1}] accuracy found {k_fold_id3_acc / k_fold}")
 
         total_id3_acc = total_id3_acc / 10
-        logging.info(f"ID3 Accuracy of {data_p} = {total_id3_acc}")
+        logging.info(f"{name} Accuracy of {data_p} = {total_id3_acc}")
+
+
+def start(k_fold):
+
+    cross_fold('./data/*.data', id3_compute, name="ID3", k_fold=k_fold)
+
     pass
 
 
