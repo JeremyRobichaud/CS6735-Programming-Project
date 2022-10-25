@@ -6,6 +6,7 @@ from datetime import datetime
 import pandas as pd
 
 from algorithms.id3 import compute as id3_compute
+from algorithms.naivesbayes import compute as nb_compute
 
 
 def cross_fold(data_file_path, func, times=10, k_fold=5, name="TestingAlg"):
@@ -59,7 +60,8 @@ def cross_fold(data_file_path, func, times=10, k_fold=5, name="TestingAlg"):
 
 def start(k_fold):
 
-    cross_fold('./data/*.data', id3_compute, name="ID3", k_fold=k_fold)
+    # cross_fold('./data/*.data', id3_compute, name="ID3", k_fold=k_fold)
+    cross_fold('./data/*.data', nb_compute, name="Naive Bayes", k_fold=k_fold)
 
     pass
 
