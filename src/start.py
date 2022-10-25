@@ -40,12 +40,13 @@ def cross_fold(data_file_path, func, times=10, k_fold=5, name="TestingAlg"):
                 acc = 0
 
                 testing_df = df.iloc[i * chunk_size:(i + 1) * chunk_size, :]
+                testing_df_without_answers = testing_df.copy().drop(columns=[target_attr])
                 training_df = df.drop(range(i * chunk_size, (i + 1) * chunk_size))
 
                 classifier = func(training_df, target_attr, cols.copy(), all_attribute_values)
 
-                for index, row in testing_df.iterrows():
-                    if classifier.classify(row) == row[target_attr]:
+                for index, row in testing_df_without_answers.iterrows():
+                    if classifier.classify(row) == testing_df.loc[index][target_attr]:
                         acc += 1
 
                 k_fold_id3_acc += acc / len(testing_df)

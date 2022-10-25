@@ -9,7 +9,7 @@ class NBClassifier:
             self.name = name
             self.values = values
 
-    def __init__(self, training_data, target_name, target_values, k_smoothing=0):
+    def __init__(self, training_data, target_name, target_values, k_smoothing=1):
         self._target_attr = self._Attribute(target_name, target_values)
         self._training_data = training_data
         self._training_attributes = {}
@@ -21,6 +21,7 @@ class NBClassifier:
         self._training_data_len = len(training_data)
         self._k = k_smoothing
         self._probs = {}
+        self._probs_given = {}
         self.train()
 
     def train(self):
@@ -48,6 +49,12 @@ class NBClassifier:
         return self._probs[d_attr][d]
 
     def prob_d_given_h(self, d, d_attr, h, h_attr):
+        # Check if stored previously
+        if d_attr in self._probs_given.keys() \
+                and d in self._probs_given[d_attr].keys() \
+                and h_attr in self._probs_given[d_attr][d].keys() \
+                and h in self._probs_given[d_attr][d][h_attr].keys():
+            return self._probs_given[d_attr][d][h_attr][h]
         # P(D|h) = P(h|D)*P(h)/P(D)
         assert d_attr in self._training_attributes.keys() and h_attr in self._training_attributes.keys()
 
@@ -63,7 +70,17 @@ class NBClassifier:
         # P(d)
         prob_d = self.prob_d(d, d_attr)
 
-        return h_given_d * prob_h / prob_d
+        # Store for future
+        if d_attr not in self._probs_given.keys():
+            self._probs_given[d_attr] = {}
+        if d not in self._probs_given[d_attr].keys():
+            self._probs_given[d_attr][d] = {}
+        if h_attr not in self._probs_given[d_attr][d].keys():
+            self._probs_given[d_attr][d][h_attr] = {}
+        if h not in self._probs_given[d_attr][d][h_attr].keys():
+            self._probs_given[d_attr][d][h_attr][h] = h_given_d * prob_h / prob_d
+
+        return self._probs_given[d_attr][d][h_attr][h]
 
     def classify(self, row):
         # Naive Bayes: argmx(P(v)multi(P(a|v)))
@@ -72,6 +89,8 @@ class NBClassifier:
         for target_value in self._target_attr.values:
             prob = self.prob_d(target_value, self._target_attr.name)
             for attr in self._training_attributes.keys():
+                if attr not in list(row.index):
+                    continue
                 prob *= self.prob_d_given_h(row[attr], attr, target_value, self._target_attr.name)
             if prob >= best_prob:
                 best_prob = prob
@@ -80,6 +99,6 @@ class NBClassifier:
         return retval
 
 
-def compute(df, target_attribute, other_attributes, all_attribute_values):
+def compute(df, target_attribute, _, all_attribute_values):
     classifier = NBClassifier(df, target_attribute, all_attribute_values[target_attribute], k_smoothing=0.00001)
     return classifier
