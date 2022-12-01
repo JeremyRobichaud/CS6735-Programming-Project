@@ -2,15 +2,6 @@ import sys
 from src.algorithms.node import Node
 
 
-# Here's the Pseudocode (wikipedia):
-# Summary
-#
-#     Calculate the entropy of every attribute a {\displaystyle a} a of the data set S {\displaystyle S} S.
-#     Partition ("split") the set S {\displaystyle S} S into subsets using the attribute for which the resulting entropy after splitting is minimized; or, equivalently, information gain is maximum.
-#     Make a decision tree node containing that attribute.
-#     Recurse on subsets using the remaining attributes.
-
-
 def compute(df, target_attribute, other_attributes, all_attribute_values):
     assert target_attribute not in other_attributes
 
@@ -23,10 +14,7 @@ def compute(df, target_attribute, other_attributes, all_attribute_values):
 
     nodes_left = [
         Node(
-            o_attr, all_attribute_values[o_attr], target_attribute, all_attribute_values[target_attribute],
-            is_indexable=(
-                    type(all_attribute_values[o_attr][0]) in [int, float] and len(all_attribute_values[o_attr]) > 30
-            )
+            o_attr, all_attribute_values[o_attr], target_attribute, all_attribute_values[target_attribute]
         )
         for o_attr in other_attributes
     ]
@@ -67,7 +55,6 @@ def compute(df, target_attribute, other_attributes, all_attribute_values):
             children[key] = compute(new_df, target_attribute, new_other_attributes, all_attribute_values)
 
     assert best_child
-    children["UNK"] = children[best_child]
 
     best_node.set_children(children)
 

@@ -15,8 +15,6 @@ class NBClassifier:
         self._training_attributes = {}
         for c in list(training_data):
             attribute_values = list(training_data[c].unique())
-            if "?" in attribute_values:
-                attribute_values.remove("?")
             self._training_attributes[c] = attribute_values
         self._training_data_len = len(training_data)
         self._k = k_smoothing

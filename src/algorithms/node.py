@@ -8,13 +8,10 @@ class Node:
             self.name = name
             self.values = values
 
-    def __init__(self, attribute_name, attribute_values, target_name, target_values, is_indexable=True):
+    def __init__(self, attribute_name, attribute_values, target_name, target_values):
         attribute_values = list(attribute_values)
-        if "?" in attribute_values:
-            attribute_values.remove("?")
         self.attr = self._Attribute(attribute_name, attribute_values)
         self._target_attr = self._Attribute(target_name, target_values)
-        self.is_indexable = is_indexable and len(target_values) > 2 and type(target_values[0]) in [int, float]
         self.children = {}
 
     def classify(self, row):
@@ -22,21 +19,11 @@ class Node:
         target_value = row[self.attr.name]
         child_value = target_value
 
-        # There's 4 possibilities:
-        # If Indexible:
-        #   '<=' or '>'
-        # If not Indexible:
+        # There's 2 possibilities:
         #   target_value or UNK
-        if self.is_indexable:
-            if type(target_value) not in [int, float]:
-                target_value = float(target_value)
-            if target_value <= self._index:
-                child_value = "<="
-            else:
-                child_value = ">"
-        elif target_value not in self.children.keys():
-            child_value = "UNK"
-
+        # if target_value not in self.children.keys():
+        #     child_value = "UNK"
+        # print(self.children)
         if type(self.children[child_value]) == Node:
             return self.children[child_value].classify(row)
         return self.children[child_value]
@@ -57,48 +44,21 @@ class Node:
             (1-self.get_total_error(df, weight_value)) / (self.get_total_error(df, weight_value))
         )
 
-    def _get_index(self, df):
-        # I used GINI indexing here, but we can use whatever
-        if not self.is_indexable:
-            return
-
-        best_val = ""
-        best_gain = None
-        # The index will be the point of which it has the greatest gain as a separation point
-        for val in self.attr.values:
-            gain = self.get_gain(df.loc[df[self.attr.name] <= val])
-            gain += self.get_gain(df.loc[df[self.attr.name] > val])
-            if gain > best_gain or not best_gain:
-                best_gain = gain
-                best_val = val
-
-        self._index = best_val
-
     def set_children(self, children):
-        
-        if self.is_indexable:
-            assert "<=" in children.keys()
-            assert ">" in children.keys()
-            assert len(children) == 2
-            self.children = children
-            return
 
         for v in self.attr.values:
             assert v in children.keys()
 
-        assert "UNK" in children.keys()
-        assert len(children) == len(self.attr.values) + 1
+        assert len(children) == len(self.attr.values)
 
         self.children = children
 
     def get_grouping(self, df):
         retval = {}
-        if self.is_indexable:
-            retval["<="] = df.loc[df[self.attr.name] <= self._index]
-            retval[">"] = df.loc[df[self.attr.name] > self._index]
-            return retval
 
         for val in self.attr.values:
+            # print(self.attr.name)
+            # print(val)
             retval[val] = df.loc[df[self.attr.name] == val]
 
         return retval
