@@ -1,101 +1,85 @@
-# Adaboost on ID3
+import math
+import random
 
-def compute_error(y, y_pred, w_i):
-    '''
-    Calculate the error rate of a weak classifier m. Arguments:
-    y: actual target value
-    y_pred: predicted value by weak classifier
-    w_i: individual weights for each observation
+from src.algorithms.node import Node
+from src.algorithms.id3 import ID3_process
 
-    Note that all arrays should be the same length
-    '''
-    return (sum(w_i * (np.not_equal(y, y_pred)).astype(int))) / sum(w_i)
+import pandas as pd
 
 
-def compute_alpha(error):
-    '''
-    Calculate the weight of a weak classifier m in the majority vote of the final classifier. This is called
-    alpha in chapter 10.1 of The Elements of Statistical Learning. Arguments:
-    error: error rate from weak classifier m
-    '''
-    return np.log((1 - error) / error)
+def _get_stumps(df, target_attribute, other_attributes, all_attribute_values):
+    stumps = []
+    cur_df = df.copy()
+    for _ in range(10):
+        cur_stump = ID3_process(cur_df.copy(), target_attribute, other_attributes.copy(), all_attribute_values)
 
+        if isinstance(cur_stump, str):
+            continue
 
-def update_weights(w_i, alpha, y, y_pred):
-    '''
-    Update individual weights w_i after a boosting iteration. Arguments:
-    w_i: individual weights for each observation
-    y: actual target value
-    y_pred: predicted value by weak classifier
-    alpha: weight of weak classifier used to estimate y_pred
-    '''
-    return w_i * np.exp(alpha * (np.not_equal(y, y_pred)).astype(int))
+        # TODO: Do I need to do this? Not Sure
+        # other_attributes.remove(cur_stump.attr.name)
 
+        cur_weight = 1 / len(cur_df)
+        temp_df = cur_df.copy()
+        temp_df['cur_weight'] = [cur_weight for _ in range(len(temp_df))]
 
-class AdaBoost:
+        cur_amount_of_say = cur_stump.get_amount_of_say(temp_df, 'cur_weight')
+        new_weights = []
 
-    def __init__(self):
-        self.alphas = []
-        self.G_M = []
-        self.M = None
-        self.training_errors = []
-        self.prediction_errors = []
+        stumps.append([cur_stump, cur_amount_of_say])
 
-    def fit(self, X, y, M=100):
-        '''
-        Fit model. Arguments:
-        X: independent variables - array-like matrix
-        y: target variable - array-like vector
-        M: number of boosting rounds. Default is 100 - integer
-        '''
-
-        # Clear before calling
-        self.alphas = []
-        self.training_errors = []
-        self.M = M
-
-        # Iterate over M weak classifiers
-        for m in range(0, M):
-
-            # Set weights for current boosting iteration
-            if m == 0:
-                w_i = 1 / len(y)  # At m = 0, weights are all the same and equal to 1 / N
+        for index, row in cur_df.copy().iterrows():
+            if cur_stump.classify(row) != row[target_attribute]:
+                # incorrect_weight = sample_weight * e^cur_amount_of_say
+                new_weights.append(cur_weight * math.exp(cur_amount_of_say))
             else:
-                # (d) Update w_i
-                w_i = update_weights(w_i, alpha_m, y, y_pred)
+                # correct_weight = sample_weight * e^-cur_amount_of_say
+                new_weights.append(cur_weight * math.exp(-1 * cur_amount_of_say))
 
-            # (a) Fit weak classifier and predict labels
-            G_m = DecisionTreeClassifier(max_depth=1)  # Stump: Two terminal-node classification tree
-            G_m.fit(X, y, sample_weight=w_i)
-            y_pred = G_m.predict(X)
+        # Normalize new Weights
+        sum_nw = sum(new_weights)
+        new_weights = [nw / sum_nw for nw in new_weights]
 
-            self.G_M.append(G_m)  # Save to list of weak classifiers
+        # We will use weighted distributions over GINI Indexing
+        new_df = cur_df.copy()
+        new_df.drop(new_df.index[:], inplace=True)
 
-            # (b) Compute error
-            error_m = compute_error(y, y_pred, w_i)
-            self.training_errors.append(error_m)
+        while len(new_df) < len(cur_df) or len(list(new_df[target_attribute].unique())) < 2:
+            generated_num = random.random()
+            cur_sum = 0
+            for j in range(len(new_weights)):
+                if generated_num < cur_sum + new_weights[j]:
+                    row = dict(cur_df.iloc[j])
+                    new_row = pd.DataFrame(
+                        row, index=[0]
+                    )
+                    new_df = pd.concat([new_row, new_df.loc[:]]).reset_index(drop=True)
+                    break
+                cur_sum += new_weights[j]
+        cur_df = new_df.copy()
 
-            # (c) Compute alpha
-            alpha_m = compute_alpha(error_m)
-            self.alphas.append(alpha_m)
+    return stumps
 
-        assert len(self.G_M) == len(self.alphas)
 
-    def predict(self, X):
-        '''
-        Predict using fitted model. Arguments:
-        X: independent variables - array-like
-        '''
+class Adaboost:
+    def __init__(self, stumps, target_values):
+        for s in stumps:
+            assert len(s) == 2
+            assert isinstance(s[0], Node)
+            assert isinstance(s[1], type(0.1))
+        self._stumps = stumps
+        self._target_values = target_values
 
-        # Initialise dataframe with weak predictions for each observation
-        weak_preds = pd.DataFrame(index=range(len(X)), columns=range(self.M))
+    def classify(self, row):
+        answers = [0 for _ in self._target_values]
+        for stump in self._stumps:
+            answer = stump[0].classify(row)
+            answers[list(self._target_values).index(answer)] = stump[1]
 
-        # Predict class label for each weak classifier, weighted by alpha_m
-        for m in range(self.M):
-            y_pred_m = self.G_M[m].predict(X) * self.alphas[m]
-            weak_preds.iloc[:, m] = y_pred_m
+        return list(self._target_values)[answers.index(max(answers))]
 
-        # Calculate final predictions
-        y_pred = (1 * np.sign(weak_preds.T.sum())).astype(int)
 
-        return y_pred
+def compute(df, target_attribute, other_attributes, all_attribute_values):
+    stumps = _get_stumps(df, target_attribute, other_attributes, all_attribute_values)
+
+    return Adaboost(stumps, all_attribute_values[target_attribute])

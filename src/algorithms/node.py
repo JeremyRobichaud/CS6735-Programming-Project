@@ -40,9 +40,8 @@ class Node:
         return total_error + k
 
     def get_amount_of_say(self, df, weight_value):
-        return (1/2) * math.log(
-            (1-self.get_total_error(df, weight_value)) / (self.get_total_error(df, weight_value))
-        )
+        total_error = self.get_total_error(df, weight_value)
+        return 0.5 * math.log((1-total_error) / total_error)
 
     def set_children(self, children):
 

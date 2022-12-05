@@ -6,6 +6,7 @@ import pandas as pd
 
 from src.algorithms.node import Node
 from src.algorithms.id3 import compute as id3_compute
+from src.algorithms.adaboost import compute as adaboost_compute
 from src.algorithms.naivesbayes import compute as nb_compute
 from src.algorithms.ann import compute as ann_compute
 
@@ -16,26 +17,27 @@ class Council:
         self.accuracy = []
         self.target_values = []
 
-    def train(self, t_df, target_attr, other_attr, all_attribute_values, council_func):
+    def train(self, t_df, target_attr, other_attr, all_attribute_values, council_func, kfold=5):
 
-        t_df = pd.DataFrame(t_df)
-        self.target_values = all_attribute_values[target_attr]
-        t_df = t_df.sample(frac=1)
-        df_length = len(t_df)
+        self.target_values = list(all_attribute_values[target_attr])
+        temp_df = t_df.copy().sample(frac=1)
+        df_length = len(temp_df)
         chunk_size = int(df_length / 8)
-        cur_acc = [0, 0, 0]
+        cur_acc = [0 for _ in council_func]
+        counter = 0
 
-        for i in range(8):
-            testing_df = t_df.copy().iloc[i * chunk_size:(i + 1) * chunk_size, :]
+        for i in range(kfold):
+            counter += 1
+            testing_df = temp_df.copy().iloc[i * chunk_size:(i + 1) * chunk_size, :]
             testing_df_without_answers = testing_df.copy().drop(columns=[target_attr])
-            training_df = t_df.copy()
+            training_df = temp_df.copy()
+            if len(list(testing_df[target_attr].unique())) < 2 or len(list(training_df[target_attr].unique())) < 2:
+                continue
             for i in testing_df.index:
                 training_df.drop(i)
-
             classifiers = [
-                func(training_df, target_attr, other_attr.copy(), all_attribute_values.copy()) for func in council_func
+                func(training_df.copy(), target_attr, other_attr.copy(), all_attribute_values.copy()) for func in council_func
             ]
-
             for j in range(len(classifiers)):
                 acc = 0
                 for index, row in testing_df_without_answers.iterrows():
@@ -44,10 +46,10 @@ class Council:
 
                 cur_acc[j] += acc / len(testing_df)
 
-        self.accuracy = [c_a / 8 for c_a in cur_acc]
+        self.accuracy = [c_a / counter for c_a in cur_acc]
 
         self.council = [
-            func(t_df, target_attr, other_attr, all_attribute_values) for func in council_func
+            func(t_df.copy(), target_attr, other_attr.copy(), all_attribute_values.copy()) for func in council_func
         ]
 
     def classify(self, row):
@@ -77,6 +79,7 @@ def compute(df, target_attribute, other_attributes, all_attribute_values):
     council = Council()
     council_funcs = [
         id3_compute,
+        adaboost_compute,
         nb_compute,
         ann_compute
     ]

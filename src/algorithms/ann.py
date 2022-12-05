@@ -1,4 +1,5 @@
 # ANN with backpropagation
+import math
 import sys
 from math import exp
 from random import seed
@@ -15,8 +16,12 @@ class NeuralNetwork:
     class Node:
         def __init__(self, num_inputs, preset_weights=None):
             self._delta = None
+            # calculate the range for the weights
+            minimum = -1.0 / math.sqrt(num_inputs)
+            maximum = 1.0 / math.sqrt(num_inputs)
+
             # +1 for k value
-            self._weights = [random() for _ in range(num_inputs + 1)]
+            self._weights = [random() * (maximum - minimum) + minimum for _ in range(num_inputs + 1)]
             if preset_weights and type(preset_weights) == list:
                 self._weights = preset_weights
 
@@ -50,8 +55,13 @@ class NeuralNetwork:
             # sig(w0a0 + w1a1 + ... + wNaN + b)
             return sigmoid_function(retval)
 
-    def __init__(self, target_attribute, other_attributes, all_attribute_values, num_hidden_layers=1):
+    def __init__(self, target_attribute, other_attributes, all_attribute_values, num_hidden_layers=10):
 
+        self._ff = None
+        self._prev_row = None
+        self._prev_layer_num = None
+        self._prev_node_num = None
+        self._prev_results = None
         self._t_attr = target_attribute
         self._o_attrs = other_attributes
         self._all_attr_values = all_attribute_values
@@ -75,7 +85,7 @@ class NeuralNetwork:
         # So they will have num_h weights, for num_output nodes
         self._layers.append([self.Node(self._num_h) for _ in range(self._num_output)])
 
-    def _feed_forward(self, row, layer_num=None, node_num=None):
+    def _feed_forward(self, row):
 
         row = list(row)
 
@@ -84,6 +94,7 @@ class NeuralNetwork:
         for i in range(len(row)):
             inputs[i] = list(self._all_attr_values[self._o_attrs[i]]).index(row[i])
 
+        self._ff = [[0 for _ in layer] for layer in self._layers]
         # Travers through all layers with given inputs
         for i in range(len(self._layers)):
             cur_layers = self._layers[i]
@@ -93,9 +104,7 @@ class NeuralNetwork:
                 cur_node = cur_layers[j]
                 retval = cur_node.output(temp_input)
                 inputs.append(retval)
-                # print(i, layer_num, j, node_num)
-                if i == layer_num and j == node_num:
-                    return retval
+                self._ff[i][j] = retval
 
         # Apply final input to output layer
         return inputs
@@ -104,10 +113,12 @@ class NeuralNetwork:
         testing_df_without_answers = df.copy().drop(columns=[self._t_attr])
 
         deviations = [[0 for _ in range(len(self._layers[i]))] for i in range(len(self._layers))]
-        count = 0
+        count = len(testing_df_without_answers)
+        if count <= 0:
+            print(df)
+        assert count > 0
 
         for index, row in testing_df_without_answers.iterrows():
-            count += 1
             answer = df.loc[index][self._t_attr]
             answer_idx = list(self._all_attr_values[self._t_attr]).index(answer)
             answer_matrix = [0.0 for _ in self._all_attr_values[self._t_attr]]
@@ -129,8 +140,7 @@ class NeuralNetwork:
                 layer_indx = (i * -1) - 2
                 for j in range(len(self._layers[layer_indx])):
                     node = self._layers[layer_indx][j]
-                    node_output = self._feed_forward(row, len(self._layers) + layer_indx, j)
-
+                    node_output = self._ff[len(self._layers) + layer_indx][j]
                     summation = 0
 
                     # E(weight_hk * delta_k)
@@ -150,23 +160,21 @@ class NeuralNetwork:
                 for j in range(len(current_layer)):
                     node = current_layer[j]
                     current_weights = node.get_weights()
-                    temp_weights = current_weights.copy()
                     for w in range(len(current_weights) - 1):
                         # muu * delta_j * input_i_j
                         muu = float(l_rate)
                         delta_j = float(node.get_delta())
 
                         if i > 1:
-                            input_i_j = float(self._feed_forward(row, i-1, w))
+                            input_i_j = self._ff[i-1][w]
                         else:
                             input_i_j = float(inputs[w])
 
                         deviations[i][j] += muu * delta_j * input_i_j
-
         for i, current_layer in reversed(list(enumerate(self._layers))):
             for j in range(len(current_layer)):
-                node = current_layer[j]
-                current_weights = node.get_weights()
+                temp_node = current_layer[j]
+                current_weights = temp_node.get_weights()
                 temp_weights = current_weights.copy()
                 for w in range(len(current_weights) - 1):
                     # Take average of deviation
@@ -174,11 +182,11 @@ class NeuralNetwork:
 
                 temp_weights[-1] = current_weights[-1] + (deviations[i][j]/count)
 
-                node.set_weights(temp_weights)
+                temp_node.set_weights(temp_weights)
+                self._layers[i][j] = temp_node
 
     def train(self, df, l_rate=0.1):
-
-        self._feed_backward(df, l_rate)
+        self._feed_backward(df.copy(), l_rate)
 
         return self
 
@@ -191,15 +199,14 @@ class NeuralNetwork:
 def compute(df, target_attribute, other_attributes, all_attribute_values):
 
     # Initialize Network
-    network = NeuralNetwork(target_attribute, other_attributes, all_attribute_values, 5)
+    network = NeuralNetwork(target_attribute, other_attributes, all_attribute_values, 3)
 
     epoch_num = 5
     # Mini-Batch
     batch_size = 100
     for _ in range(epoch_num):
         # Shuffle the df
-        df = df.sample(frac=1)
-
+        temp_df = df.sample(frac=1).copy()
         new_batch = 0
         counter = 1
         flag = True
@@ -207,11 +214,12 @@ def compute(df, target_attribute, other_attributes, all_attribute_values):
         while flag:
             prev_batch = new_batch
             new_batch = counter * batch_size
-            if new_batch > len(df.index):
-                new_batch = len(df.index)
+            if new_batch > len(temp_df.index):
+                new_batch = len(temp_df.index)
                 flag = False
-            network.train(df.iloc[prev_batch:new_batch], l_rate=0.1)
-            counter += 1
+            if prev_batch < new_batch:
+                network.train(temp_df.iloc[prev_batch:new_batch], l_rate=0.1)
+                counter += 1
 
     # Return Network
     return network

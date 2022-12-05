@@ -2,7 +2,7 @@ import sys
 from src.algorithms.node import Node
 
 
-def compute(df, target_attribute, other_attributes, all_attribute_values):
+def ID3_process(df, target_attribute, other_attributes, all_attribute_values):
     assert target_attribute not in other_attributes
 
     target_vals = df[target_attribute].unique()
@@ -41,21 +41,20 @@ def compute(df, target_attribute, other_attributes, all_attribute_values):
 
     assert groups
 
-    best_child = None
-    best_len = -1
-
     for key in groups:
         new_df = groups[key]
-        if len(new_df) > best_len or not best_child:
-            best_child = key
-            best_len = len(new_df)
+        # If this child has no remaining DF, take greatest target value in original df
         if len(new_df) == 0:
             children[key] = df[target_attribute].value_counts().index[0]
         else:
             children[key] = compute(new_df, target_attribute, new_other_attributes, all_attribute_values)
 
-    assert best_child
+    assert children
 
     best_node.set_children(children)
 
     return best_node
+
+
+def compute(df, target_attribute, other_attributes, all_attribute_values):
+    return ID3_process(df, target_attribute, other_attributes, all_attribute_values)
