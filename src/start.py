@@ -104,13 +104,11 @@ def cross_fold(data_file_path, func, times=10, k_fold=5, name="TestingAlg", targ
                 if len(list(testing_df[target_attr].unique())) < 2:
                     break
 
-                # logging.debug(f"\t...[Fold {i + 1}] training PreProcessor")
                 pp.train(training_df, target_attr, indexable_cols, drops)
                 for c in indexable_cols:
                     all_attribute_values[c] = [i for i in range(len(cur_df[target_attr].unique()))]
                 training_df = pp.process(training_df)
 
-                # logging.debug(f"\t...[Fold {i + 1}] training {name}")
                 try:
                     classifier = func(training_df.copy(), target_attr, cols.copy(), all_attribute_values)
                 except Exception as err:

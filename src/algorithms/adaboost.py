@@ -16,9 +16,6 @@ def _get_stumps(df, target_attribute, other_attributes, all_attribute_values):
         if isinstance(cur_stump, str):
             continue
 
-        # TODO: Do I need to do this? Not Sure
-        # other_attributes.remove(cur_stump.attr.name)
-
         cur_weight = 1 / len(cur_df)
         temp_df = cur_df.copy()
         temp_df['cur_weight'] = [cur_weight for _ in range(len(temp_df))]

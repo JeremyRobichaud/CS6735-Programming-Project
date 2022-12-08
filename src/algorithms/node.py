@@ -19,11 +19,6 @@ class Node:
         target_value = row[self.attr.name]
         child_value = target_value
 
-        # There's 2 possibilities:
-        #   target_value or UNK
-        # if target_value not in self.children.keys():
-        #     child_value = "UNK"
-        # print(self.children)
         if type(self.children[child_value]) == Node:
             return self.children[child_value].classify(row)
         return self.children[child_value]
@@ -56,8 +51,6 @@ class Node:
         retval = {}
 
         for val in self.attr.values:
-            # print(self.attr.name)
-            # print(val)
             retval[val] = df.loc[df[self.attr.name] == val]
 
         return retval

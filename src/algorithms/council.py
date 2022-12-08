@@ -1,10 +1,3 @@
-# All the Algorithms
-
-import sys
-
-import pandas as pd
-
-from src.algorithms.node import Node
 from src.algorithms.id3 import compute as id3_compute
 from src.algorithms.adaboost import compute as adaboost_compute
 from src.algorithms.naivesbayes import compute as nb_compute
